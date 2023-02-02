@@ -1682,6 +1682,8 @@ static inline size_t js_def_malloc_usable_size(void *ptr)
     return _msize(ptr);
 #elif defined(EMSCRIPTEN)
     return 0;
+#elif defined(__rtems__)
+    return 0;
 #elif defined(__linux__)
     return malloc_usable_size(ptr);
 #else
@@ -1755,6 +1757,8 @@ static const JSMallocFunctions def_malloc_funcs = {
 #elif defined(_WIN32)
     (size_t (*)(const void *))_msize,
 #elif defined(EMSCRIPTEN)
+    NULL,
+#elif defined(__rtems__)
     NULL,
 #elif defined(__linux__)
     (size_t (*)(const void *))malloc_usable_size,
@@ -42015,6 +42019,8 @@ static JSValue js___date_clock(JSContext *ctx, JSValueConst this_val,
 static int getTimezoneOffset(int64_t time) {
 #if defined(_WIN32)
     /* XXX: TODO */
+    return 0;
+#elif defined(__rtems__)
     return 0;
 #else
     time_t ti;

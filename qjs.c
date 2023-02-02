@@ -153,6 +153,8 @@ static size_t js_trace_malloc_usable_size(const void *ptr)
     return 0;
 #elif defined(__linux__) || defined(__GLIBC__)
     return malloc_usable_size((void *)ptr);
+#elif defined(__rtems__)
+    return 0;
 #else
     /* change this to `return 0;` if compilation fails */
     return malloc_usable_size((void *)ptr);
@@ -268,6 +270,20 @@ static const JSMallocFunctions trace_mf = {
     js_trace_free,
     js_trace_realloc,
     js_trace_malloc_usable_size,
+#if defined(__APPLE__)
+    malloc_size,
+#elif defined(_WIN32)
+    (size_t (*)(const void *))_msize,
+#elif defined(EMSCRIPTEN)
+    NULL,
+#elif defined(__rtems__)
+    NULL,
+#elif defined(__linux__)
+    (size_t (*)(const void *))malloc_usable_size,
+#else
+    /* change this to `NULL,` if compilation fails */
+    malloc_usable_size,
+#endif
 };
 
 #define PROG_NAME "qjs"
@@ -322,7 +338,11 @@ int main(int argc, char **argv)
     /* load jscalc runtime if invoked as 'qjscalc' */
     {
         const char *p, *exename;
+#if !defined(__rtems__)
         exename = argv[0];
+#else
+        exename = "qjs.exe";
+#endif
         p = strrchr(exename, '/');
         if (p)
             exename = p + 1;

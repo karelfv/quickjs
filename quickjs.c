@@ -1710,6 +1710,8 @@ static size_t js_def_malloc_usable_size(const void *ptr)
     return 0;
 #elif defined(__linux__) || defined(__GLIBC__)
     return malloc_usable_size((void *)ptr);
+#elif defined(__rtems__)
+    return 0;
 #else
     /* change this to `return 0;` if compilation fails */
     return malloc_usable_size((void *)ptr);
@@ -1777,6 +1779,20 @@ static const JSMallocFunctions def_malloc_funcs = {
     js_def_free,
     js_def_realloc,
     js_def_malloc_usable_size,
+#if defined(__APPLE__)
+    malloc_size,
+#elif defined(_WIN32)
+    (size_t (*)(const void *))_msize,
+#elif defined(EMSCRIPTEN)
+    NULL,
+#elif defined(__rtems__)
+    NULL,
+#elif defined(__linux__)
+    (size_t (*)(const void *))malloc_usable_size,
+#else
+    /* change this to `NULL,` if compilation fails */
+    malloc_usable_size,
+#endif
 };
 
 JSRuntime *JS_NewRuntime(void)
@@ -43373,6 +43389,12 @@ static const JSCFunctionListEntry js_math_obj[] = {
    between UTC time and local time 'd' in minutes */
 static int getTimezoneOffset(int64_t time)
 {
+#if defined(_WIN32)
+    /* XXX: TODO */
+    return 0;
+#elif defined(__rtems__)
+    return 0;
+#else
     time_t ti;
     int res;
 

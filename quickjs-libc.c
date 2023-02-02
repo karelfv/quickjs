@@ -816,9 +816,11 @@ static void js_std_file_finalizer(JSRuntime *rt, JSValue val)
     JSSTDFile *s = JS_GetOpaque(val, js_std_file_class_id);
     if (s) {
         if (s->f && s->close_in_finalizer) {
+#if !defined(__rtems__)
             if (s->is_popen)
                 pclose(s->f);
             else
+#endif
                 fclose(s->f);
         }
         js_free_rt(rt, s);
@@ -937,8 +939,11 @@ static JSValue js_std_popen(JSContext *ctx, JSValueConst this_val,
         JS_ThrowTypeError(ctx, "invalid file mode");
         goto fail;
     }
-
+#if !defined(__rtems__)
     f = popen(filename, mode);
+#else
+    f = NULL;
+#endif
     if (!f)
         err = errno;
     else
@@ -1060,9 +1065,11 @@ static JSValue js_std_file_close(JSContext *ctx, JSValueConst this_val,
         return JS_EXCEPTION;
     if (!s->f)
         return JS_ThrowTypeError(ctx, "invalid file handle");
+#if !defined(__rtems__)
     if (s->is_popen)
         err = js_get_errno(pclose(s->f));
     else
+#endif
         err = js_get_errno(fclose(s->f));
     s->f = NULL;
     return JS_NewInt32(ctx, err);
@@ -1391,7 +1398,11 @@ static JSValue js_std_urlGet(JSContext *ctx, JSValueConst this_val,
         return JS_EXCEPTION;
     }
     //    printf("%s\n", (char *)cmd_buf.buf);
+#if !defined(__rtems__)
     f = popen((char *)cmd_buf.buf, "r");
+#else
+    f = NULL;
+#endif
     dbuf_free(&cmd_buf);
     if (!f) {
         return JS_ThrowTypeError(ctx, "could not start curl");
@@ -1448,7 +1459,9 @@ static JSValue js_std_urlGet(JSContext *ctx, JSValueConst this_val,
  done:
     js_free(ctx, buf);
     buf = NULL;
+ #if !defined(__rtems__)
     pclose(f);
+ #endif
     f = NULL;
     dbuf_free(data_buf);
     data_buf = NULL;
@@ -1475,8 +1488,10 @@ static JSValue js_std_urlGet(JSContext *ctx, JSValueConst this_val,
     dbuf_free(header_buf);
     return ret_obj;
  fail:
+ #if !defined(__rtems__)
     if (f)
         pclose(f);
+ #endif
     js_free(ctx, buf);
     if (data_buf)
         dbuf_free(data_buf);
@@ -2302,6 +2317,8 @@ static int js_os_poll(JSContext *ctx)
     struct timeval tv, *tvp;
 
     /* only check signals in the main thread */
+#if !defined(__rtems__)
+    /* TODO: Signals are not supported by RTEMS right? */
     if (!ts->recv_pipe &&
         unlikely(os_pending_signals != 0)) {
         JSOSSignalHandler *sh;
@@ -2317,11 +2334,13 @@ static int js_os_poll(JSContext *ctx)
             }
         }
     }
-
+#endif
     if (list_empty(&ts->os_rw_handlers) && list_empty(&ts->os_timers) &&
         list_empty(&ts->port_list))
         return -1; /* no more events */
 
+#if !defined(__rtems__)
+    /* TODO: investigate and if ok enable for RTEMS */
     if (!list_empty(&ts->os_timers)) {
         cur_time = get_time_ms();
         min_delay = 10000;
@@ -2348,6 +2367,7 @@ static int js_os_poll(JSContext *ctx)
         tvp = NULL;
     }
 
+#endif
     FD_ZERO(&rfds);
     FD_ZERO(&wfds);
     fd_max = -1;
@@ -2359,7 +2379,8 @@ static int js_os_poll(JSContext *ctx)
         if (!JS_IsNull(rh->rw_func[1]))
             FD_SET(rh->fd, &wfds);
     }
-
+#if !defined(__rtems__)
+    /* TODO: investigate and if ok enable for RTEMS */
     list_for_each(el, &ts->port_list) {
         JSWorkerMessageHandler *port = list_entry(el, JSWorkerMessageHandler, link);
         if (!JS_IsNull(port->on_message_func)) {
@@ -2368,7 +2389,7 @@ static int js_os_poll(JSContext *ctx)
             FD_SET(ps->read_fd, &rfds);
         }
     }
-
+#endif
     ret = select(fd_max + 1, &rfds, &wfds, NULL, tvp);
     if (ret > 0) {
         list_for_each(el, &ts->os_rw_handlers) {
@@ -3663,6 +3684,8 @@ void js_std_set_worker_new_context_func(JSContext *(*func)(JSRuntime *rt))
 #define OS_PLATFORM "darwin"
 #elif defined(EMSCRIPTEN)
 #define OS_PLATFORM "js"
+#elif defined(__rtems__)
+#define OS_PLATFORM "rtems"
 #else
 #define OS_PLATFORM "linux"
 #endif

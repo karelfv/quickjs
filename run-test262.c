@@ -35,6 +35,47 @@
 #include <dirent.h>
 #include <ftw.h>
 
+#if defined(__rtems__)
+#include <rtems.h>
+#include <rtems/libio.h>
+#include <bsp.h>
+/*#include <rtems/bsd/bsd.h>*/
+#include <machine/rtems-bsd-commands.h>
+#include <sysexits.h>
+
+#if defined(LIBBSP_ARM_ALTERA_CYCLONE_V_BSP_H)
+  #define NET_CFG_INTERFACE_0 "dwc0"
+#elif defined(LIBBSP_ARM_REALVIEW_PBX_A9_BSP_H)
+  #define NET_CFG_INTERFACE_0 "smc0"
+#elif defined(LIBBSP_ARM_XILINX_ZYNQ_BSP_H)
+  #define NET_CFG_INTERFACE_0 "cgem0"
+#elif defined(LIBBSP_M68K_GENMCF548X_BSP_H)
+  #define NET_CFG_INTERFACE_0 "fec0"
+#elif defined(LIBBSP_ARM_LPC32XX_BSP_H)
+  #define NET_CFG_INTERFACE_0 "lpe0"
+#elif defined(LIBBSP_POWERPC_QORIQ_BSP_H)
+  #if QORIQ_CHIP_IS_T_VARIANT(QORIQ_CHIP_VARIANT)
+    #define NET_CFG_INTERFACE_0 "fm1m3"
+  #else
+    #define NET_CFG_INTERFACE_0 "tsec0"
+  #endif
+#elif defined(LIBBSP_ARM_ATSAM_BSP_H)
+  #define NET_CFG_INTERFACE_0 "if_atsam0"
+#else
+  #define NET_CFG_INTERFACE_0 "@NET_CFG_INTERFACE_0@"
+#endif
+
+#define NET_CFG_SELF_IP "169.254.10.10"
+
+#define NET_CFG_NETMASK "255.255.0.0"
+
+#define NET_CFG_PEER_IP "169.254.1.1"
+
+#define NET_CFG_GATEWAY_IP "169.254.1.1"
+
+#endif
+
+
 #include "cutils.h"
 #include "list.h"
 #include "quickjs-libc.h"
@@ -944,11 +985,13 @@ void load_config(const char *filename, const char *ignore)
         SECTION_TESTS,
     } section = SECTION_NONE;
     int lineno = 0;
-
+    printf("load_config: `%s'\n", filename);
     f = fopen(filename, "rb");
     if (!f) {
+        printf("can't open this.\n");
         perror_exit(1, filename);
     }
+    printf("OK\n");
     base_name = get_basename(filename);
 
     while (fgets(buf, sizeof(buf), f) != NULL) {
@@ -1620,6 +1663,7 @@ int run_test(const char *filename, int index)
 
     harness = harness_dir;
 
+    fprintf(stderr, "\ntest (%d): %s\n", index, filename);
     if (new_style) {
         if (!harness) {
             p = strstr(filename, "test/");
@@ -2018,6 +2062,72 @@ char *get_opt_arg(const char *option, char *arg)
     return arg;
 }
 
+#if defined(__rtems__)
+static void
+default_network_set_self_prio(rtems_task_priority prio)
+{
+	rtems_status_code sc;
+
+	sc = rtems_task_set_priority(RTEMS_SELF, prio, &prio);
+	assert(sc == RTEMS_SUCCESSFUL);
+}
+
+#ifndef DEFAULT_NETWORK_NO_INTERFACE_0
+static void
+default_network_ifconfig_hwif0(char *ifname)
+{
+	int exit_code;
+	char *ifcfg[] = {
+		"ifconfig",
+		ifname,
+#ifdef DEFAULT_NETWORK_NO_STATIC_IFCONFIG
+		"up",
+#else
+		"inet",
+		NET_CFG_SELF_IP,
+		"netmask",
+		NET_CFG_NETMASK,
+#endif
+		NULL
+	};
+
+	exit_code = rtems_bsd_command_ifconfig(RTEMS_BSD_ARGC(ifcfg), ifcfg);
+	assert(exit_code == EX_OK);
+}
+
+static void
+default_network_route_hwif0(char *ifname)
+{
+#ifndef DEFAULT_NETWORK_NO_STATIC_IFCONFIG
+	int exit_code;
+	char *dflt_route[] = {
+		"route",
+		"add",
+		"-host",
+		NET_CFG_GATEWAY_IP,
+		"-iface",
+		ifname,
+		NULL
+	};
+	char *dflt_route2[] = {
+		"route",
+		"add",
+		"default",
+		NET_CFG_GATEWAY_IP,
+		NULL
+	};
+
+	exit_code = rtems_bsd_command_route(RTEMS_BSD_ARGC(dflt_route), dflt_route);
+	assert(exit_code == EXIT_SUCCESS);
+
+	exit_code = rtems_bsd_command_route(RTEMS_BSD_ARGC(dflt_route2), dflt_route2);
+	assert(exit_code == EXIT_SUCCESS);
+#endif
+}
+#endif
+
+#endif
+
 int main(int argc, char **argv)
 {
     int optind, start_index, stop_index;
@@ -2029,6 +2139,44 @@ int main(int argc, char **argv)
     BOOL is_module = FALSE;
     clock_t clocks;
 
+#if defined(__rtems__)
+    char* ifname;
+    int e;
+    int sc;
+
+    static const char remote_target[] =
+        "169.254.1.1:/scratch/karel/rtems";
+    int rv;
+
+    ifname = NET_CFG_INTERFACE_0;
+    sc = rtems_task_wake_after(2);
+    assert(sc == RTEMS_SUCCESSFUL);
+
+    rtems_bsd_ifconfig_lo0();
+    /*#ifndef DEFAULT_NETWORK_NO_INTERFACE_0*/
+    default_network_ifconfig_hwif0(ifname);
+    default_network_route_hwif0(ifname);
+    /*#endif*/
+
+    rv = mount_and_make_target_path(&remote_target[0], "/nfs",
+                                    RTEMS_FILESYSTEM_TYPE_NFS, RTEMS_FILESYSTEM_READ_WRITE,
+                                    NULL);
+    printf("mount nfs error: %d\n", rv);
+    e = chdir("/nfs/quickjs");
+    printf("chdir error: %d\n", e);
+    argc = 7;
+    argv = malloc(sizeof(char*) * (argc + 1));
+    argv[0] = strdup("run-test262");
+    argv[1] = strdup("-m");
+    argv[2] = strdup("-c");
+    argv[3] = strdup("test262.conf");
+    argv[4] = strdup("-a");
+    argv[5] = strdup("-x");
+    argv[6] = strdup("test262_rtems_exclude.txt");
+    printf("Let's run...\n");
+    verbose++;
+#endif
+    
 #if !defined(_WIN32)
     compact = !isatty(STDERR_FILENO);
     /* Date tests assume California local time */
@@ -2053,6 +2201,7 @@ int main(int argc, char **argv)
     is_dir_list = TRUE;
     while (optind < argc) {
         char *arg = argv[optind];
+        printf("got arg: `%s'\n", arg);
         if (*arg != '-')
             break;
         optind++;
@@ -2075,6 +2224,7 @@ int main(int argc, char **argv)
         } else if (str_equal(arg, "-C")) {
             compact = 1;
         } else if (str_equal(arg, "-c")) {
+            printf("load config: `%s'\n", argv[optind]);
             load_config(get_opt_arg(arg, argv[optind++]), ignore);
         } else if (str_equal(arg, "-d")) {
             enumerate_tests(get_opt_arg(arg, argv[optind++]));

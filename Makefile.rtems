@@ -271,7 +271,11 @@ libunicode-table.h: unicode_gen
 	./unicode_gen unicode $@
 endif
 
-run-test262: $(OBJDIR)/run-test262.o $(QJS_LIB_OBJS)
+ifdef CONFIG_RTEMS
+run-test262$(EXE): $(OBJDIR)/run-test262.o $(QJS_LIB_OBJS) $(OBJDIR)/rtems-config.o
+else
+run-test262$(EXE): $(OBJDIR)/run-test262.o $(QJS_LIB_OBJS)
+endif
 	$(CC) $(CROSS_LDFLAGS) $(CROSS_CFLAGS) $(LDFLAGS) -o $@ $^ $(LIBS)
 
 run-test262-debug: $(patsubst %.o, %.debug.o, $(OBJDIR)/run-test262.o $(QJS_LIB_OBJS))

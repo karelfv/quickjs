@@ -2317,7 +2317,6 @@ static int js_os_poll(JSContext *ctx)
     struct timeval tv, *tvp;
 
     /* only check signals in the main thread */
-#if !defined(__rtems__)
     /* TODO: Signals are not supported by RTEMS right? */
     if (!ts->recv_pipe &&
         unlikely(os_pending_signals != 0)) {
@@ -2334,7 +2333,6 @@ static int js_os_poll(JSContext *ctx)
             }
         }
     }
-#endif
     if (list_empty(&ts->os_rw_handlers) && list_empty(&ts->os_timers) &&
         list_empty(&ts->port_list))
         return -1; /* no more events */
@@ -2379,7 +2377,6 @@ static int js_os_poll(JSContext *ctx)
         if (!JS_IsNull(rh->rw_func[1]))
             FD_SET(rh->fd, &wfds);
     }
-#if !defined(__rtems__)
     /* TODO: investigate and if ok enable for RTEMS */
     list_for_each(el, &ts->port_list) {
         JSWorkerMessageHandler *port = list_entry(el, JSWorkerMessageHandler, link);
@@ -2389,7 +2386,6 @@ static int js_os_poll(JSContext *ctx)
             FD_SET(ps->read_fd, &rfds);
         }
     }
-#endif
     ret = select(fd_max + 1, &rfds, &wfds, NULL, tvp);
     if (ret > 0) {
         list_for_each(el, &ts->os_rw_handlers) {

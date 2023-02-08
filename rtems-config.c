@@ -104,6 +104,7 @@ static void Init( rtems_task_argument arg )
 #define RTEMS_BSD_CONFIG_BSP_CONFIG
 #define RTEMS_BSD_CONFIG_TERMIOS_KQUEUE_AND_POLL
 #define RTEMS_BSD_CONFIG_INIT
+#define CONFIGURE_FILESYSTEM_NFS
 
 #include <machine/rtems-bsd-config.h>
 

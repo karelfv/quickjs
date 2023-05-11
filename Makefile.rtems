@@ -35,7 +35,8 @@
 #CONFIG_M32=y
 # force cross compilation to RTEMS 6
 CONFIG_RTEMS=y
-CONFIG_RTEMS_BSP=arm-rtems6-stm32h747i-disco
+#CONFIG_RTEMS_BSP=arm-rtems6-stm32h747i-disco
+CONFIG_RTEMS_BSP=arm-rtems6-precidata-sl-3011
 
 ifdef CONFIG_DARWIN
 # use clang instead of gcc

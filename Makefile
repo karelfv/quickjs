@@ -123,7 +123,7 @@ else ifdef CONFIG_COSMO
 else
   HOST_CC=gcc
   CC=$(CROSS_PREFIX)gcc
-  CFLAGS+=-g -Wall -MMD -MF $(OBJDIR)/$(@F).d
+  CFLAGS+=-g -gz -Wall -MMD -MF $(OBJDIR)/$(@F).d
   CFLAGS += -Wno-array-bounds -Wno-format-truncation
   ifdef CONFIG_LTO
     AR=$(CROSS_PREFIX)gcc-ar

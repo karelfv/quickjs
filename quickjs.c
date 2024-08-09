@@ -43389,10 +43389,7 @@ static const JSCFunctionListEntry js_math_obj[] = {
    between UTC time and local time 'd' in minutes */
 static int getTimezoneOffset(int64_t time)
 {
-#if defined(_WIN32)
-    /* XXX: TODO */
-    return 0;
-#elif defined(__rtems__)
+#if defined(__rtems__)
     return 0;
 #else
     time_t ti;
@@ -43441,6 +43438,7 @@ static int getTimezoneOffset(int64_t time)
     }
 #endif
     return res;
+#endif
 }
 
 #if 0
